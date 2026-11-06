@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Ambiguous Buttons</title></head>
+<body>
+  <button type="button">Submit</button>
+  <button type="button">Submit</button>
+  <p role="status" id="click-result">No button clicked</p>
+  <script>
+    document.querySelectorAll("button").forEach((button, index) => {
+      button.addEventListener("click", () => {
+        document.querySelector("#click-result").textContent = `Clicked ${index + 1}`;
+      });
+    });
+  </script>
+</body>
+</html>

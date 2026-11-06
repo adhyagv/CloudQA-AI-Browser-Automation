@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sample Login</title>
+</head>
+<body>
+  <main>
+    <h1>Sign in</h1>
+    <form id="login-form">
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" autocomplete="username">
+
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password">
+
+      <button id="login-button" type="submit">Sign in</button>
+    </form>
+    <p id="login-error" role="status" hidden></p>
+
+    <section id="dashboard" hidden>
+      <h1>Dashboard</h1>
+      <a id="dashboard-home" href="#dashboard">Dashboard home</a>
+    </section>
+  </main>
+  <script>
+    const form = document.querySelector("#login-form");
+    const error = document.querySelector("#login-error");
+    const dashboard = document.querySelector("#dashboard");
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const username = document.querySelector("#username").value;
+      const password = document.querySelector("#password").value;
+      if (username === "tester" && password === "correct-horse") {
+        form.hidden = true;
+        error.hidden = true;
+        dashboard.hidden = false;
+      } else {
+        error.textContent = "Invalid username or password";
+        error.hidden = false;
+      }
+    });
+  </script>
+</body>
+</html>

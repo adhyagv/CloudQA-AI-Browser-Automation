@@ -81,8 +81,8 @@ class FillAction(StrictAction):
             match = _SECRET_REFERENCE_PATTERN.fullmatch(value)
             if match is None:
                 raise ValueError("secret references must use {{secret:NAME}} syntax")
-            allowed = set((info.context or {}).get("allowed_secret_names", ()))
-            if match.group(1) not in allowed:
+            allowed_names = (info.context or {}).get("allowed_secret_names")
+            if allowed_names is not None and match.group(1) not in set(allowed_names):
                 raise ValueError("secret name is not in the allowed secret names list")
         return value
 

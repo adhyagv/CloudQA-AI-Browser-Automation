@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Form Controls</title></head>
+<body>
+  <h1>Preferences</h1>
+  <label for="color">Favorite color</label>
+  <select id="color" name="color">
+    <option value="red">Red</option>
+    <option value="blue">Blue</option>
+  </select>
+
+  <label for="subscribe">Subscribe</label>
+  <input id="subscribe" type="checkbox">
+
+  <fieldset>
+    <legend>Contact method</legend>
+    <label for="contact-email">Email</label>
+    <input id="contact-email" type="radio" name="contact" value="email">
+    <label for="contact-phone">Phone</label>
+    <input id="contact-phone" type="radio" name="contact" value="phone">
+  </fieldset>
+
+  <label for="notes">Notes</label>
+  <input id="notes" type="text">
+  <button id="book-now" type="button">Book now</button>
+  <button id="pay-now" type="button">Pay now</button>
+  <p id="press-result" role="status"></p>
+  <script>
+    document.querySelector("#notes").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        document.querySelector("#press-result").textContent = "Enter pressed";
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Cookie Overlay</title>
+  <style>
+    #cookie-banner {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: grid;
+      place-content: center;
+      background: rgb(0 0 0 / 60%);
+    }
+    #cookie-panel {
+      background: white;
+      padding: 2rem;
+    }
+  </style>
+</head>
+<body>
+  <button id="underlay-button" type="button">Continue</button>
+  <div id="cookie-banner" role="dialog" aria-label="Cookie notice">
+    <div id="cookie-panel">
+      <p>We use local test cookies.</p>
+      <button id="dismiss-cookies" type="button">Accept cookies</button>
+    </div>
+  </div>
+  <p id="cookie-result" role="status"></p>
+  <script>
+    document.querySelector("#dismiss-cookies").addEventListener("click", () => {
+      document.querySelector("#cookie-banner").remove();
+      document.querySelector("#cookie-result").textContent = "Cookie notice dismissed";
+    });
+  </script>
+</body>
+</html>

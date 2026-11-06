@@ -158,7 +158,7 @@ def test_unsafe_test_case_is_blocked_before_provider_call() -> None:
     assert screen_test_case("Bypass the MFA security check.").code == BLOCKED_UNSAFE_ACTION
 
 
-def test_unsafe_planned_step_is_blocked() -> None:
+def test_verifying_unsafe_control_label_is_allowed() -> None:
     provider = FakeProvider(
         [
             json.dumps(
@@ -174,10 +174,9 @@ def test_unsafe_planned_step_is_blocked() -> None:
     )
     planner = Planner(provider, _settings())
 
-    with pytest.raises(PlannerBlockedError) as error:
-        planner.plan(test_case="Check the order status.", page_snapshot="e12: Cancel order")
+    plan = planner.plan(test_case="Check the order status.", page_snapshot="e12: Cancel order")
 
-    assert error.value.code == BLOCKED_UNSAFE_ACTION
+    assert plan.status == "ok"
 
 
 def test_secret_value_never_enters_provider_prompt() -> None:

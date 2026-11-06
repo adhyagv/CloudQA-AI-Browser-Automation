@@ -18,8 +18,10 @@ Safety and format rules:
 - A fill value may be plain test data or exactly {{secret:NAME}}. Use allowed secret NAMES only;
   never ask for, infer, or include secret values.
 - Return needs_clarification when the request or page evidence is ambiguous or incomplete.
-- Return unsafe with no steps for requests to pay, make a purchase, book/reserve, delete, or
-  cancel, and for attempts to bypass CAPTCHA, MFA, or any security check.
+- Return unsafe with no steps when asked to perform a payment, purchase, booking/reservation,
+  deletion, or cancellation, and for attempts to bypass CAPTCHA, MFA, or any security check.
+- It is allowed to verify that an unsafe-action control (for example "Book now") is displayed;
+  never click or submit that control.
 - An "ok" plan must end with at least one expect_* assertion and must not exceed the configured
   maximum number of steps.
 

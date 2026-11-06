@@ -1,6 +1,6 @@
 # CloudQA Task 2
 
-A milestone-based AI-assisted, natural-language browser test automation project. The current implementation includes a constrained AI test planner; browser execution and reporting workflows are not implemented.
+A milestone-based AI-assisted, natural-language browser test automation project. The current implementation includes a constrained AI test planner and a local-fixture Playwright browser engine.
 
 ## Technology stack
 
@@ -31,7 +31,9 @@ Install the Playwright Chromium browser:
 python -m playwright install chromium
 ```
 
-To configure Gemini for a future manual run, copy `.env.example` to `.env` and set `GEMINI_API_KEY` and a currently supported `GEMINI_MODEL` locally. Choose a model listed in the [official Gemini models documentation](https://ai.google.dev/gemini-api/docs/models); the model name is intentionally not hardcoded. Never commit `.env` or share its contents. The automated test suite uses only `FakeProvider` and does not make API calls.
+To configure Gemini for a future manual run, copy `.env.example` to `.env` and set `GEMINI_API_KEY` and a currently supported `GEMINI_MODEL` locally. Choose a model listed in the [official Gemini models documentation](https://ai.google.dev/gemini-api/docs/models); the model name is intentionally not hardcoded. Never commit `.env` or share its contents. AI planner tests use only `FakeProvider`; browser tests use local fixture files, with no live API calls or websites.
+
+The browser uses headless Chromium by default. `BROWSER_HEADED=true` opts into a visible browser; navigation/action timeouts and snapshot element/text limits are configurable in `.env`. Add comma-separated secret names to `ALLOWED_SECRET_NAMES` and set each corresponding secret as a separate local environment variable. Secret values are resolved only at execution time and are masked from results.
 
 Run the offline tests with:
 
@@ -44,14 +46,14 @@ python -m pytest -q
 ```text
 CloudQA-Task2/
 ├── ai/          # Planner, provider interfaces, prompts, and schemas
-├── browser/     # Future browser automation components
+├── browser/     # Chromium manager, page snapshots, locator resolver, and actions
 ├── config/      # Environment-backed settings
-├── engine/      # Initial plan safety screening
-├── fixtures/    # Test fixtures
-├── models/      # Strict action and plan models
+├── engine/      # Assertion evaluation and action safety checks
+├── fixtures/    # Static local HTML browser fixtures
+├── models/      # Strict actions, plans, and step results
 ├── reporting/   # Future reporting components
 ├── reports/     # Generated reports (except .gitkeep, ignored)
-├── tests/       # Offline planner tests
+├── tests/       # Fake-provider and local Chromium tests
 ├── main.py      # Placeholder application entry point
 ├── .env.example
 ├── .gitignore
@@ -60,4 +62,4 @@ CloudQA-Task2/
 
 ## Development status
 
-Milestone 3: AI planning, schema validation, provider abstraction, offline tests, and initial safety screening. The planner does not execute browser actions. Browser locator resolution, action execution, a test runner, and final report generation remain future work.
+Milestone 4: AI planning, local-fixture browser execution, snapshot-based semantic locator resolution, assertion evaluation, and initial unsafe-action blocking. The browser engine does not navigate to live sites during automated tests. Full test orchestration and final report generation remain future work.
