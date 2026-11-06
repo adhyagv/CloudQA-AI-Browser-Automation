@@ -41,6 +41,14 @@ Run the offline tests with:
 python -m pytest -q
 ```
 
+Run an offline CLI smoke test against a local fixture:
+
+```powershell
+python main.py --url "file:///C:/path/to/fixtures/sample_login.html" --test-case "Verify the sign in button is visible." --provider fake
+```
+
+For a configured Gemini run, use `--provider gemini`. The default maximum is four Gemini API calls per run (`MAX_PLANNER_CALLS`); report JSON, HTML, and text summaries are written under `reports/`.
+
 ## Project structure
 
 ```text
@@ -48,10 +56,10 @@ CloudQA-Task2/
 ├── ai/          # Planner, provider interfaces, prompts, and schemas
 ├── browser/     # Chromium manager, page snapshots, locator resolver, and actions
 ├── config/      # Environment-backed settings
-├── engine/      # Assertion evaluation and action safety checks
+├── engine/      # Test orchestration, assertion evaluation, and action safety checks
 ├── fixtures/    # Static local HTML browser fixtures
 ├── models/      # Strict actions, plans, and step results
-├── reporting/   # Future reporting components
+├── reporting/   # JSON, HTML, and text result reports
 ├── reports/     # Generated reports (except .gitkeep, ignored)
 ├── tests/       # Fake-provider and local Chromium tests
 ├── main.py      # Placeholder application entry point
@@ -62,4 +70,4 @@ CloudQA-Task2/
 
 ## Development status
 
-Milestone 4: AI planning, local-fixture browser execution, snapshot-based semantic locator resolution, assertion evaluation, and initial unsafe-action blocking. The browser engine does not navigate to live sites during automated tests. Full test orchestration and final report generation remain future work.
+Milestone 5: AI planning integrated with bounded browser execution, safety checks, assertion evaluation, CLI use, and JSON/HTML/text reports. Automated tests use the fake provider and local fixtures only. Live network tests are marked `live` and skipped by default; they require `RUN_LIVE_TESTS=1`.

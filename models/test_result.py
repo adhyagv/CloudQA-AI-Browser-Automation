@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,14 +26,24 @@ class StepRecord(BaseModel):
     status: ResultCategory
     message: str
     evidence: str = ""
+    action: str | None = None
 
 
 class TestResult(BaseModel):
+    __test__ = False
     model_config = ConfigDict(extra="forbid", strict=True)
 
     status: ResultCategory
     message: str
     steps: list[StepRecord] = Field(default_factory=list)
+    website: str = ""
+    test_case: str = ""
+    ai_interpretation: str = ""
+    browser_execution: str = ""
+    plan_steps: list[dict[str, Any]] = Field(default_factory=list)
+    ai_calls: int = 0
+    execution_time_seconds: float = 0.0
+    screenshot_path: str | None = None
 
 
 __all__ = ["ResultCategory", "StepRecord", "TestResult"]

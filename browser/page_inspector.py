@@ -83,7 +83,8 @@ class PageInspector:
         self.settings = settings or load_settings()
 
     def inspect(self, page: Page) -> PageSnapshot:
-        headings = self._headings(page)
+        heading_items = self._heading_items(page)
+        headings = tuple(text for _, text in heading_items)
         locators = page.locator(_INTERACTIVE_SELECTOR)
         total = locators.count()
         elements: list[SnapshotElement] = []
@@ -135,6 +136,28 @@ class PageInspector:
             if len(elements) >= self.settings.snapshot_max_elements:
                 break
 
+        for locator, text in heading_items:
+            if len(elements) >= self.settings.snapshot_max_elements:
+                break
+            elements.append(
+                SnapshotElement(
+                    element_id=f"e{len(elements) + 1}",
+                    role="heading",
+                    name=text,
+                    label="",
+                    placeholder="",
+                    text=text,
+                    input_type="",
+                    enabled=False,
+                    visible=True,
+                    checked=None,
+                    masked=False,
+                    locator=locator,
+                    stable_id=locator.get_attribute("id") or "",
+                    tag=locator.evaluate("(element) => element.tagName.toLowerCase()"),
+                )
+            )
+
         return PageSnapshot(
             token=uuid.uuid4().hex,
             url=page.url,
@@ -143,16 +166,16 @@ class PageInspector:
             elements=tuple(elements),
         )
 
-    def _headings(self, page: Page) -> tuple[str, ...]:
-        headings: list[str] = []
+    def _heading_items(self, page: Page) -> list[tuple[Locator, str]]:
+        headings: list[tuple[Locator, str]] = []
         locator = page.locator("h1, h2, h3")
         for index in range(locator.count()):
             heading = locator.nth(index)
             if heading.is_visible():
                 text = self._truncate(heading.inner_text())
                 if text:
-                    headings.append(text)
-        return tuple(headings)
+                    headings.append((heading, text))
+        return headings
 
     def _associated_label(self, page: Page, locator: Locator, stable_id: str) -> str:
         labels = page.locator("label")

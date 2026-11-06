@@ -34,6 +34,7 @@ class Settings:
     snapshot_max_elements: int = 60
     snapshot_text_length: int = 120
     stale_retry_attempts: int = 1
+    max_planner_calls: int = 4
 
     def __repr__(self) -> str:
         key_repr = "'**********'" if self.gemini_api_key else "None"
@@ -53,7 +54,8 @@ class Settings:
             f"action_timeout_ms={self.action_timeout_ms!r}, "
             f"snapshot_max_elements={self.snapshot_max_elements!r}, "
             f"snapshot_text_length={self.snapshot_text_length!r}, "
-            f"stale_retry_attempts={self.stale_retry_attempts!r})"
+            f"stale_retry_attempts={self.stale_retry_attempts!r}, "
+            f"max_planner_calls={self.max_planner_calls!r})"
         )
 
     def get_secret(self, name: str) -> str | None:
@@ -100,6 +102,7 @@ def load_settings(
     snapshot_max_elements = _integer_setting(values, "SNAPSHOT_MAX_ELEMENTS", 60)
     snapshot_text_length = _integer_setting(values, "SNAPSHOT_TEXT_LENGTH", 120)
     stale_retry_attempts = _integer_setting(values, "BROWSER_STALE_RETRY_ATTEMPTS", 1)
+    max_planner_calls = _integer_setting(values, "MAX_PLANNER_CALLS", 4)
     try:
         timeout = float(values.get("GEMINI_TIMEOUT_SECONDS", "30"))
     except ValueError as exc:
@@ -117,6 +120,8 @@ def load_settings(
         raise SettingsError("Snapshot limits must be at least 1")
     if stale_retry_attempts < 0:
         raise SettingsError("BROWSER_STALE_RETRY_ATTEMPTS cannot be negative")
+    if max_planner_calls < 1:
+        raise SettingsError("MAX_PLANNER_CALLS must be at least 1")
     if not math.isfinite(timeout) or timeout <= 0:
         raise SettingsError("GEMINI_TIMEOUT_SECONDS must be greater than 0")
 
@@ -153,6 +158,7 @@ def load_settings(
         snapshot_max_elements=snapshot_max_elements,
         snapshot_text_length=snapshot_text_length,
         stale_retry_attempts=stale_retry_attempts,
+        max_planner_calls=max_planner_calls,
     )
 
 

@@ -23,8 +23,15 @@ class GeminiProviderError(RuntimeError):
 class GeminiProvider(PlannerProvider):
     """Use a configured Gemini model; no model ID is assumed by this provider."""
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        *,
+        max_api_calls: int | None = None,
+    ) -> None:
         self.settings = settings or load_settings()
+        self.max_api_calls = max_api_calls
+        self.api_calls = 0
 
     def generate(self, prompt: str, *, response_schema: type[SchemaT]) -> str:
         if not self.settings.gemini_api_key:
@@ -39,6 +46,11 @@ class GeminiProvider(PlannerProvider):
         client = genai.Client(api_key=self.settings.gemini_api_key)
         try:
             for attempt in range(self.settings.provider_retries + 1):
+                if self.max_api_calls is not None and self.api_calls >= self.max_api_calls:
+                    raise GeminiProviderError(
+                        f"Run reached its maximum of {self.max_api_calls} Gemini API calls."
+                    )
+                self.api_calls += 1
                 try:
                     interaction = client.interactions.create(
                         model=self.settings.gemini_model,

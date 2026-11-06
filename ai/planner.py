@@ -76,8 +76,8 @@ class Planner:
             if allowed_secret_names is None
             else allowed_secret_names
         )
-        prompt_test_case = self._redact_gemini_key(test_case)
-        prompt_snapshot = self._redact_gemini_key(page_snapshot)
+        prompt_test_case = self.settings.redact(test_case)
+        prompt_snapshot = self.settings.redact(page_snapshot)
         base_prompt = build_request_prompt(
             test_case=prompt_test_case,
             page_snapshot=prompt_snapshot,
@@ -115,12 +115,5 @@ class Planner:
             return plan
 
         raise PlannerError("Planner did not produce a response.")
-
-    def _redact_gemini_key(self, text: str) -> str:
-        key = self.settings.gemini_api_key
-        if key:
-            return text.replace(key, "[REDACTED]")
-        return text
-
 
 __all__ = ["Planner", "PlannerBlockedError", "PlannerError"]

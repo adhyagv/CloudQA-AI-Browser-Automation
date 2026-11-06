@@ -17,6 +17,7 @@ from models.actions import ASSERTION_ACTIONS, Action, validate_untrusted_text
 
 
 class TestPlan(BaseModel):
+    __test__ = False
     model_config = ConfigDict(extra="forbid", strict=True)
 
     status: Literal["ok", "needs_clarification", "unsafe"]
