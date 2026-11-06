@@ -1,0 +1,20 @@
+# Python environments and bytecode
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Local configuration and test cache
+.env
+.pytest_cache/
+
+# Generated reports and test artifacts
+reports/*
+!reports/.gitkeep
+test-results/
+playwright-report/
+
+# Temporary screenshots and browser artifacts
+screenshots/
+*.webm
+playwright/.cache/
