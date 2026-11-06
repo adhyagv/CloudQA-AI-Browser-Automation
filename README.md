@@ -1,6 +1,6 @@
 # CloudQA Task 2
 
-An initial project scaffold for an AI-assisted, natural-language browser test automation project. Application features are not implemented yet.
+A milestone-based AI-assisted, natural-language browser test automation project. The current implementation includes a constrained AI test planner; browser execution and reporting workflows are not implemented.
 
 ## Technology stack
 
@@ -31,22 +31,28 @@ Install the Playwright Chromium browser:
 python -m playwright install chromium
 ```
 
-When Gemini integration is introduced in a later milestone, copy `.env.example` to `.env` and set `GEMINI_API_KEY` locally. Never commit `.env` or share its contents. No API key is needed for the current scaffold or browser verification.
+To configure Gemini for a future manual run, copy `.env.example` to `.env` and set `GEMINI_API_KEY` and a currently supported `GEMINI_MODEL` locally. Choose a model listed in the [official Gemini models documentation](https://ai.google.dev/gemini-api/docs/models); the model name is intentionally not hardcoded. Never commit `.env` or share its contents. The automated test suite uses only `FakeProvider` and does not make API calls.
+
+Run the offline tests with:
+
+```powershell
+python -m pytest -q
+```
 
 ## Project structure
 
 ```text
 CloudQA-Task2/
-├── ai/          # Future AI components
+├── ai/          # Planner, provider interfaces, prompts, and schemas
 ├── browser/     # Future browser automation components
-├── config/      # Configuration package
-├── engine/      # Future test execution components
+├── config/      # Environment-backed settings
+├── engine/      # Initial plan safety screening
 ├── fixtures/    # Test fixtures
-├── models/      # Data models
+├── models/      # Strict action and plan models
 ├── reporting/   # Future reporting components
 ├── reports/     # Generated reports (except .gitkeep, ignored)
-├── tests/       # Tests
-├── main.py      # Placeholder entry point
+├── tests/       # Offline planner tests
+├── main.py      # Placeholder application entry point
 ├── .env.example
 ├── .gitignore
 └── requirements.txt
@@ -54,4 +60,4 @@ CloudQA-Task2/
 
 ## Development status
 
-Milestone 2: environment verification and project scaffolding. The AI test planner, Gemini calls, natural-language interpretation, locator engine, browser action executor, test runner, and final report generation are not implemented.
+Milestone 3: AI planning, schema validation, provider abstraction, offline tests, and initial safety screening. The planner does not execute browser actions. Browser locator resolution, action execution, a test runner, and final report generation remain future work.
