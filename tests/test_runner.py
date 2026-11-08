@@ -103,7 +103,9 @@ def test_full_run_pass_requires_real_browser_assertion(tmp_path: Path) -> None:
     def response(prompt: str) -> str:
         request = _request(prompt)
         element = next(
-            item for item in request["page_snapshot"]["elements"] if item["role"] == "heading"
+            item
+            for item in request["page_snapshot"]["elements"]
+            if item["role"] == "button" and item["name"] == "Sign in"
         )
         return _ok(_first_step("expect_visible", element))
 
@@ -243,6 +245,207 @@ def test_correct_login_reinspects_and_verifies_dashboard(tmp_path: Path) -> None
     assert "Dashboard" in provider.prompts[1]
 
 
+def _login_then_stale_assertion(prompt: str) -> str:
+    request = _request(prompt)
+    elements = request["page_snapshot"]["elements"]
+    username = next(item for item in elements if item["label"] == "Username")
+    password = next(item for item in elements if item["label"] == "Password")
+    login_button = next(item for item in elements if item["name"] == "Sign in")
+    old_heading = next(item for item in elements if item["name"] == "Sign in")
+    return _ok(
+        {"action": "fill", "element_id": username["id"], "value": "tester"},
+        {"action": "fill", "element_id": password["id"], "value": "correct-horse"},
+        {"action": "click", "element_id": login_button["id"]},
+        _first_step("expect_visible", old_heading),
+    )
+
+
+def test_login_requires_exact_success_message_and_logout_assertions(
+    tmp_path: Path,
+) -> None:
+    success_message = "Welcome, tester. You have successfully logged in."
+
+    def post_login_plan(prompt: str) -> str:
+        request = _request(prompt)
+        elements = request["page_snapshot"]["elements"]
+        status = next(item for item in elements if item["role"] == "status")
+        logout = next(item for item in elements if item["role"] == "button" and item["name"] == "Logout")
+        assert success_message in status["text"]
+        return _ok(
+            {
+                "action": "expect_text",
+                "element_id": status["id"],
+                "text": success_message,
+            },
+            _first_step("expect_visible", logout),
+        )
+
+    test_case = (
+        'Log in with the provided test account, verify the success message '
+        f'"{success_message}", and verify that the Logout button is visible.'
+    )
+    provider = ScriptedProvider([_login_then_stale_assertion, post_login_plan])
+    result = _run(provider, tmp_path, test_case=test_case)
+    files, summary = ResultWriter(
+        reports_dir=tmp_path / "reports",
+        settings=_settings(),
+    ).write(result)
+
+    assert result.status == ResultCategory.PASS
+    assert result.ai_calls == 2
+    assert "Logout" in provider.prompts[1]
+    assert success_message in provider.prompts[1]
+    assert [record.status for record in result.steps if record.action == "expect_visible"] == [
+        ResultCategory.NOT_EXECUTED,
+        ResultCategory.PASS,
+    ]
+    assert any(
+        record.action == "expect_visible" and record.status == ResultCategory.PASS
+        and "Logout" in record.evidence
+        for record in result.steps
+    )
+    assert all(
+        entry["outcome"] != ResultCategory.NOT_EXECUTED.value
+        for entry in result.plan_steps
+        if entry.get("action") in {"fill", "click"}
+    )
+    assert len(result.plan_steps) == len(result.steps)
+    assert {
+        entry["run_step"] for entry in result.plan_steps
+    } == {record.step for record in result.steps}
+    assert "NOT_EXECUTED" in summary
+    report_html = files.html_path.read_text(encoding="utf-8")
+    assert "NOT_EXECUTED" in report_html
+    assert "Logout" in report_html
+
+
+def test_login_cannot_pass_when_requested_success_message_or_logout_is_missing(
+    tmp_path: Path,
+) -> None:
+    def dashboard_only(prompt: str) -> str:
+        request = _request(prompt)
+        dashboard = next(
+            item
+            for item in request["page_snapshot"]["elements"]
+            if item["role"] == "heading" and item["name"] == "Dashboard"
+        )
+        return _ok(_first_step("expect_visible", dashboard))
+
+    test_case = (
+        'Log in and verify the success message "Welcome, tester. You have successfully '
+        'logged in.", and verify that the Logout button is visible.'
+    )
+    result = _run(
+        ScriptedProvider([_login_then_stale_assertion, dashboard_only]),
+        tmp_path,
+        test_case=test_case,
+    )
+
+    assert result.status == ResultCategory.FAIL
+    assert "success message" in result.message
+    assert "Logout link/button" in result.message
+    assert any(
+        record.status == ResultCategory.NOT_EXECUTED
+        and "success message" in record.message
+        for record in result.steps
+    )
+    assert any(
+        record.status == ResultCategory.NOT_EXECUTED
+        and "Logout link/button" in record.message
+        for record in result.steps
+    )
+
+
+def test_navigation_login_reinspects_and_verifies_text_and_logout_link(
+    tmp_path: Path,
+) -> None:
+    success_message = "You logged into a secure area!"
+
+    def login_plan(prompt: str) -> str:
+        request = _request(prompt)
+        elements = request["page_snapshot"]["elements"]
+        username = next(item for item in elements if item["label"] == "Username")
+        password = next(item for item in elements if item["label"] == "Password")
+        login = next(
+            item
+            for item in elements
+            if item["role"] == "button" and item["name"] == "Login"
+        )
+        stale_heading = next(
+            item for item in elements if item["role"] == "heading"
+        )
+        return _ok(
+            {"action": "fill", "element_id": username["id"], "value": "tester"},
+            {"action": "fill", "element_id": password["id"], "value": "test-password"},
+            {"action": "click", "element_id": login["id"]},
+            _first_step("expect_visible", stale_heading),
+        )
+
+    def post_login_plan(prompt: str) -> str:
+        request = _request(prompt)
+        elements = request["page_snapshot"]["elements"]
+        assert request["page_snapshot"]["url"].endswith("navigation_dashboard.html")
+        text = next(
+            item
+            for item in elements
+            if item["role"] == "text" and success_message in item["text"]
+        )
+        logout = next(
+            item
+            for item in elements
+            if item["role"] == "link" and item["name"] == "Logout"
+        )
+        return _ok(
+            {
+                "action": "expect_text",
+                "element_id": text["id"],
+                "text": success_message,
+            },
+            _first_step("expect_visible", logout),
+        )
+
+    provider = ScriptedProvider([login_plan, post_login_plan])
+    test_case = (
+        f'Log in and verify the success message "{success_message}" and that the '
+        "Logout link is visible."
+    )
+    runner = TestRunner(
+        provider,
+        _settings(),
+        reports_dir=tmp_path / "reports",
+    )
+    result = runner.run(
+        url=(FIXTURES / "login_navigation.html").resolve().as_uri(),
+        test_case=test_case,
+    )
+
+    assert result.status == ResultCategory.PASS
+    assert result.ai_calls == 2
+    assert "navigation_dashboard.html" in provider.prompts[1]
+    assert success_message in provider.prompts[1]
+    post_login_elements = _request(provider.prompts[1])["page_snapshot"]["elements"]
+    assert any(item["role"] == "link" and item["name"] == "Logout" for item in post_login_elements)
+    assert any(
+        record.action == "expect_text"
+        and record.status == ResultCategory.PASS
+        and success_message in record.evidence
+        for record in result.steps
+    )
+    assert any(
+        record.action == "expect_visible"
+        and record.status == ResultCategory.PASS
+        and "link: Logout" in record.evidence
+        for record in result.steps
+    )
+    assert len(result.plan_steps) == len(result.steps)
+    assert all(
+        entry["outcome"] == ResultCategory.NOT_EXECUTED.value
+        for entry in result.plan_steps
+        if entry["action"] == "expect_visible"
+        and entry["run_step"] == 4
+    )
+
+
 def test_missing_secret_returns_name_without_value(tmp_path: Path) -> None:
     missing_value = "must-not-appear-in-result"
 
@@ -288,10 +491,12 @@ def test_unsafe_case_returns_blocked(tmp_path: Path) -> None:
 def test_planner_invalid_json_then_correction_succeeds(tmp_path: Path) -> None:
     def corrected(prompt: str) -> str:
         request = _request(prompt)
-        heading = next(
-            item for item in request["page_snapshot"]["elements"] if item["role"] == "heading"
+        button = next(
+            item
+            for item in request["page_snapshot"]["elements"]
+            if item["role"] == "button" and item["name"] == "Sign in"
         )
-        return _ok(_first_step("expect_visible", heading))
+        return _ok(_first_step("expect_visible", button))
 
     provider = ScriptedProvider(["not json", corrected])
     result = _run(provider, tmp_path)

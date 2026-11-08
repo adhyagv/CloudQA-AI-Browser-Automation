@@ -84,7 +84,12 @@ class ReportGenerator:
     def _html(self, result: TestResult) -> str:
         summary = html.escape(self.summary(result))
         plan_rows = "\n".join(
-            f"<li><code>{html.escape(json.dumps(step, ensure_ascii=False))}</code></li>"
+            "<li>"
+            f"Step {html.escape(str(step.get('run_step', '?')))} — "
+            f"{html.escape(str(step.get('outcome', 'NOT_EXECUTED')))}: "
+            f"{html.escape(str(step.get('outcome_message', 'No outcome recorded.')))} "
+            f"<code>{html.escape(json.dumps({key: value for key, value in step.items() if key not in {'run_step', 'outcome', 'outcome_message'}}, ensure_ascii=False))}</code>"
+            "</li>"
             for step in result.plan_steps
         )
         step_rows = "\n".join(

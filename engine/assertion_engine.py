@@ -53,11 +53,17 @@ class AssertionEngine:
 
         if isinstance(action, ExpectVisibleAction):
             visible = resolution.locator.is_visible()
+            target_description = (
+                f"{resolution.element.role}: {resolution.element.name}"
+                if resolution.element is not None
+                else action.element_id
+            )
             return self._result(
                 action,
                 ResultCategory.PASS if visible else ResultCategory.FAIL,
                 "Visibility assertion passed." if visible else "Visibility assertion failed.",
-                f"Observed visible={visible} for {action.element_id}.",
+                f"Observed visible={visible} for {target_description} "
+                f"({action.element_id}).",
             )
 
         actual_text = self.settings.redact(resolution.locator.inner_text().strip())

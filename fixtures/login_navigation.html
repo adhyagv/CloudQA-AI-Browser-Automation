@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Navigation Login</title>
+</head>
+<body>
+  <main>
+    <h1>Sign in</h1>
+    <form id="login-form">
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password">
+      <button type="submit">Login</button>
+    </form>
+  </main>
+  <script>
+    document.querySelector("#login-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      window.location.href = "navigation_dashboard.html";
+    });
+  </script>
+</body>
+</html>

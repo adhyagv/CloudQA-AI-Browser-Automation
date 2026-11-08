@@ -2,22 +2,36 @@
 
 from __future__ import annotations
 
-import time
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import httpx2
 from google import genai
-from google.genai import errors
+from google.genai import types
+from google.genai._gaos.lib import compat_errors
 from pydantic import BaseModel
 
-from config.settings import Settings, load_settings
 from ai.provider import PlannerProvider
+from config.settings import Settings, load_settings
 
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
 
 
+def _remove_discriminator(schema: Any) -> Any:
+    if isinstance(schema, dict):
+        return {
+            key: _remove_discriminator(value)
+            for key, value in schema.items()
+            if key != "discriminator"
+        }
+    if isinstance(schema, list):
+        return [_remove_discriminator(value) for value in schema]
+    return schema
+
+
 class GeminiProviderError(RuntimeError):
     """Raised when Gemini is unavailable or cannot return a response."""
+
+    code = "EXECUTION_ERROR"
 
 
 class GeminiProvider(PlannerProvider):
@@ -43,46 +57,92 @@ class GeminiProvider(PlannerProvider):
                 "GEMINI_MODEL is missing; configure a currently supported model ID."
             )
 
-        client = genai.Client(api_key=self.settings.gemini_api_key)
-        try:
-            for attempt in range(self.settings.provider_retries + 1):
-                if self.max_api_calls is not None and self.api_calls >= self.max_api_calls:
-                    raise GeminiProviderError(
-                        f"Run reached its maximum of {self.max_api_calls} Gemini API calls."
-                    )
-                self.api_calls += 1
-                try:
-                    interaction = client.interactions.create(
-                        model=self.settings.gemini_model,
-                        input=prompt,
-                        response_format={
-                            "type": "text",
-                            "mime_type": "application/json",
-                            "schema": response_schema.model_json_schema(),
-                        },
-                        timeout=self.settings.timeout_seconds,
-                    )
-                    response_text = interaction.output_text
-                    if not response_text:
-                        raise GeminiProviderError(
-                            "Gemini returned an empty structured response."
-                        )
-                    return response_text
-                except errors.APIError as exc:
-                    if exc.code == 429 and attempt < self.settings.provider_retries:
-                        time.sleep(min(2**attempt, 8))
-                        continue
-                    raise GeminiProviderError(
-                        f"Gemini API request failed with status {exc.code}."
-                    ) from exc
-                except httpx2.HTTPError as exc:
-                    raise GeminiProviderError(
-                        f"Gemini API transport failed ({type(exc).__name__})."
-                    ) from exc
-        finally:
-            client.close()
+        if self.max_api_calls is not None and self.api_calls >= self.max_api_calls:
+            raise GeminiProviderError(
+                f"Run reached its maximum of {self.max_api_calls} Gemini API calls."
+            )
 
-        raise GeminiProviderError("Gemini request ended without a response.")
+        client = None
+        try:
+            client = genai.Client(
+                api_key=self.settings.gemini_api_key,
+                http_options=types.HttpOptions(timeout=self.settings.gemini_timeout_ms),
+            )
+            self.api_calls += 1
+            compatible_schema = _remove_discriminator(
+                response_schema.model_json_schema()
+            )
+            response = client.models.generate_content(
+                model=self.settings.gemini_model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_json_schema=compatible_schema,
+                    thinking_config=types.ThinkingConfig(
+                        thinking_level=types.ThinkingLevel.MINIMAL
+                    ),
+                    max_output_tokens=4096,
+                ),
+            )
+            response_text = response.text
+            if not response_text or not response_text.strip():
+                raise GeminiProviderError("Gemini returned an empty structured response.")
+            return response_text
+        except compat_errors.APITimeoutError:
+            raise GeminiProviderError(
+                "Gemini API request timed out. The transport timeout is configured by "
+                "GEMINI_TIMEOUT_MS; check connectivity and try again later."
+            ) from None
+        except compat_errors.AuthenticationError:
+            raise GeminiProviderError(
+                "Gemini authentication failed. Verify GEMINI_API_KEY and its API access."
+            ) from None
+        except compat_errors.RateLimitError:
+            raise GeminiProviderError(
+                "Gemini API quota or rate limit was exceeded. Check quota and retry later."
+            ) from None
+        except compat_errors.APIStatusError as exc:
+            status_code = getattr(exc, "status_code", None)
+            body = getattr(exc, "body", None)
+            body_text = str(body).lower()
+            invalid_key = (
+                "api_key_invalid" in body_text
+                or "invalid api key" in body_text
+                or "api key not valid" in body_text
+            )
+            if status_code in {401, 403} or invalid_key:
+                message = (
+                    "Gemini authentication failed. Verify GEMINI_API_KEY and its API access."
+                )
+            elif status_code == 429:
+                message = (
+                    "Gemini API quota or rate limit was exceeded. Check quota and retry later."
+                )
+            else:
+                message = (
+                    f"Gemini API request failed with HTTP status {status_code or 'unknown'}."
+                )
+            raise GeminiProviderError(message) from None
+        except compat_errors.APIConnectionError:
+            raise GeminiProviderError(
+                "Could not connect to the Gemini API. Check the network connection and try again."
+            ) from None
+        except compat_errors.APIError:
+            raise GeminiProviderError(
+                "Gemini API request failed. Check the model configuration and service status."
+            ) from None
+        except httpx2.TimeoutException:
+            raise GeminiProviderError(
+                "Gemini API request timed out. The transport timeout is configured by "
+                "GEMINI_TIMEOUT_MS; check connectivity and try again later."
+            ) from None
+        except httpx2.HTTPError:
+            raise GeminiProviderError(
+                "Gemini network request failed. Check the network connection and try again."
+            ) from None
+        finally:
+            if client is not None:
+                client.close()
 
 
 __all__ = ["GeminiProvider", "GeminiProviderError"]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 import uuid
 from dataclasses import replace
@@ -26,10 +27,58 @@ _SCREENSHOT_CATEGORIES = {
     ResultCategory.AMBIGUOUS,
     ResultCategory.EXECUTION_ERROR,
 }
+_SUCCESS_MESSAGE_MARKER = re.compile(
+    r"\b(?:(?:success|confirmation|welcome)\s+(?:message|text)|"
+    r"successful\s+login\s+(?:message|text))\b",
+    re.IGNORECASE,
+)
+_QUOTED_TEXT = re.compile(r"""["'“‘]([^"'”’]+)["'”’]""")
+_VISIBLE_CONTROL_MENTION = re.compile(
+    r"\b([A-Za-z][A-Za-z0-9_-]*(?:\s+[A-Za-z][A-Za-z0-9_-]*){0,2})\s+"
+    r"(?:button|link)\b",
+    re.IGNORECASE,
+)
+_VISIBLE_WORDS = re.compile(
+    r"\b(?:visible|displayed|shown|present|appears|exists|verify|check|confirm|ensure)\b",
+    re.IGNORECASE,
+)
+_BUTTON_FILLER_WORDS = {
+    "assert",
+    "check",
+    "confirm",
+    "ensure",
+    "that",
+    "the",
+    "verify",
+}
 
 
 class PlannerCallLimitError(RuntimeError):
     """Raised when a run reaches its configured AI-call budget."""
+
+
+def _requested_assertions(test_case: str) -> tuple[bool, set[str], set[str]]:
+    success_requested = bool(_SUCCESS_MESSAGE_MARKER.search(test_case))
+    exact_success_texts: set[str] = set()
+    for marker in _SUCCESS_MESSAGE_MARKER.finditer(test_case):
+        following_text = test_case[marker.end() : marker.end() + 120]
+        match = _QUOTED_TEXT.search(following_text)
+        if match:
+            exact_success_texts.add(match.group(1).strip())
+
+    visible_buttons: set[str] = set()
+    for match in _VISIBLE_CONTROL_MENTION.finditer(test_case):
+        surrounding_text = test_case[max(0, match.start() - 70) : match.end() + 70]
+        if not _VISIBLE_WORDS.search(surrounding_text):
+            continue
+        words = [
+            word
+            for word in match.group(1).split()
+            if word.lower() not in _BUTTON_FILLER_WORDS
+        ]
+        if words:
+            visible_buttons.add(" ".join(words).casefold())
+    return success_requested, exact_success_texts, visible_buttons
 
 
 class _LimitedProvider(PlannerProvider):
@@ -82,6 +131,14 @@ class TestRunner:
         if headed is not None and headed != settings.headed:
             settings = self._with_headed(settings, headed)
         manager: BrowserManager | None = None
+        (
+            success_message_requested,
+            requested_success_texts,
+            requested_visible_buttons,
+        ) = _requested_assertions(test_case)
+        verified_success_texts: set[str] = set()
+        verified_success_message = False
+        verified_visible_buttons: set[str] = set()
 
         try:
             validated_url = validate_navigation_url(url)
@@ -120,7 +177,19 @@ class TestRunner:
 
                 final_plan = plan
                 result.ai_interpretation = settings.redact(plan.summary)
-                result.plan_steps.extend(self._safe_plan_steps(plan, settings))
+                plan_entries = self._safe_plan_steps(plan, settings)
+                plan_step_numbers: list[int] = []
+                for entry in plan_entries:
+                    step_number += 1
+                    plan_step_numbers.append(step_number)
+                    entry.update(
+                        {
+                            "run_step": step_number,
+                            "outcome": ResultCategory.NOT_EXECUTED.value,
+                            "outcome_message": "Planned step has not been executed yet.",
+                        }
+                    )
+                result.plan_steps.extend(plan_entries)
                 if plan.status == "needs_clarification":
                     result.status = ResultCategory.NEEDS_USER_INPUT
                     result.message = settings.redact(plan.message or "The test needs clarification.")
@@ -132,39 +201,80 @@ class TestRunner:
 
                 replan = False
                 iteration_failed = False
-                for action in plan.steps:
+                for action_index, action in enumerate(plan.steps):
                     if executed_steps >= settings.max_steps:
                         result.status = ResultCategory.EXECUTION_ERROR
                         result.message = (
                             f"Run reached its maximum of {settings.max_steps} executed steps."
                         )
+                        self._mark_unexecuted_steps(
+                            result,
+                            plan.steps,
+                            plan_entries,
+                            plan_step_numbers,
+                            action_index,
+                            "The configured execution-step limit was reached.",
+                        )
                         iteration_failed = True
                         break
-                    step_number += 1
                     executed_steps += 1
                     before = snapshot
                     action_result = executor.execute(action, snapshot=snapshot)
+                    plan_entries[action_index]["outcome"] = action_result.status.value
+                    plan_entries[action_index]["outcome_message"] = settings.redact(
+                        action_result.message
+                    )
                     result.steps.extend(
                         self._renumber_records(
                             action_result.steps,
-                            step_number,
+                            plan_step_numbers[action_index],
                             settings,
                         )
                     )
+                    target = (
+                        snapshot.get(action.element_id)
+                        if isinstance(
+                            action,
+                            (ExpectVisibleAction, ExpectTextAction),
+                        )
+                        else None
+                    )
+                    if action_result.status == ResultCategory.PASS:
+                        if isinstance(action, ExpectTextAction):
+                            if action.text in requested_success_texts:
+                                verified_success_texts.add(action.text)
+                            if (
+                                success_message_requested
+                                and not requested_success_texts
+                                and target is not None
+                                and target.role in {"status", "alert", "heading"}
+                                and action.text in {target.text, target.name}
+                            ):
+                                verified_success_message = True
+                        elif (
+                            isinstance(action, ExpectVisibleAction)
+                            and target is not None
+                            and target.role in {"button", "link"}
+                        ):
+                            label = target.name.strip().casefold()
+                            if label in requested_visible_buttons:
+                                verified_visible_buttons.add(label)
                     if action_result.status != ResultCategory.PASS:
                         result.status = action_result.status
                         result.message = settings.redact(action_result.message)
+                        self._mark_unexecuted_steps(
+                            result,
+                            plan.steps,
+                            plan_entries,
+                            plan_step_numbers,
+                            action_index + 1,
+                            "Execution stopped after an earlier step did not pass.",
+                        )
                         iteration_failed = True
                         break
 
                     if isinstance(action, _ASSERTIONS):
                         evaluated_assertions += 1
-                        if action_result.status != ResultCategory.PASS:
-                            all_assertions_passed = False
-                        if not all_assertions_passed:
-                            result.status = ResultCategory.FAIL
-                            result.message = "One or more browser assertions failed."
-                            break
                         continue
 
                     snapshot = executor.current_snapshot or executor.inspect()
@@ -189,7 +299,37 @@ class TestRunner:
                 }:
                     break
                 if replan:
+                    self._mark_unexecuted_steps(
+                        result,
+                        plan.steps,
+                        plan_entries,
+                        plan_step_numbers,
+                        action_index + 1,
+                        "A fresh page snapshot was requested after the page changed.",
+                    )
                     continue
+                missing_assertions = self._missing_requested_assertions(
+                    success_message_requested=success_message_requested,
+                    requested_success_texts=requested_success_texts,
+                    requested_visible_buttons=requested_visible_buttons,
+                    verified_success_texts=verified_success_texts,
+                    verified_success_message=verified_success_message,
+                    verified_visible_buttons=verified_visible_buttons,
+                )
+                if missing_assertions:
+                    self._record_missing_assertions(
+                        result,
+                        missing_assertions,
+                        step_number,
+                        settings,
+                    )
+                    step_number += len(missing_assertions)
+                    result.status = ResultCategory.FAIL
+                    result.message = (
+                        "Requested assertion(s) were missing or not verified: "
+                        + "; ".join(missing_assertions)
+                    )
+                    break
                 if evaluated_assertions:
                     result.status = (
                         ResultCategory.PASS
@@ -275,6 +415,86 @@ class TestRunner:
             )
             for step in plan.steps
         ]
+
+    @staticmethod
+    def _mark_unexecuted_steps(
+        result: TestResult,
+        actions: list[Action],
+        plan_entries: list[dict[str, Any]],
+        step_numbers: list[int],
+        start_index: int,
+        reason: str,
+    ) -> None:
+        for index in range(start_index, len(actions)):
+            message = f"NOT_EXECUTED: {reason}"
+            plan_entries[index]["outcome"] = ResultCategory.NOT_EXECUTED.value
+            plan_entries[index]["outcome_message"] = reason
+            result.steps.append(
+                StepRecord(
+                    step=step_numbers[index],
+                    status=ResultCategory.NOT_EXECUTED,
+                    message=message,
+                    action=actions[index].action,
+                )
+            )
+
+    @staticmethod
+    def _missing_requested_assertions(
+        *,
+        success_message_requested: bool,
+        requested_success_texts: set[str],
+        requested_visible_buttons: set[str],
+        verified_success_texts: set[str],
+        verified_success_message: bool,
+        verified_visible_buttons: set[str],
+    ) -> list[str]:
+        missing: list[str] = []
+        missing.extend(
+            f'expect_text for exact success message "{text}"'
+            for text in sorted(requested_success_texts - verified_success_texts)
+        )
+        if (
+            success_message_requested
+            and not requested_success_texts
+            and not verified_success_message
+        ):
+            missing.append("expect_text for the requested success message")
+        missing.extend(
+            f"expect_visible for the {label.title()} link/button"
+            for label in sorted(requested_visible_buttons - verified_visible_buttons)
+        )
+        return missing
+
+    @staticmethod
+    def _record_missing_assertions(
+        result: TestResult,
+        missing_assertions: list[str],
+        last_step_number: int,
+        settings: Settings,
+    ) -> None:
+        for offset, description in enumerate(missing_assertions, start=1):
+            action = "expect_text" if "expect_text" in description else "expect_visible"
+            step_number = last_step_number + offset
+            message = settings.redact(
+                f"NOT_EXECUTED: Requested assertion was missing or not verified: {description}"
+            )
+            result.plan_steps.append(
+                {
+                    "action": action,
+                    "requested_assertion": settings.redact(description),
+                    "run_step": step_number,
+                    "outcome": ResultCategory.NOT_EXECUTED.value,
+                    "outcome_message": message,
+                }
+            )
+            result.steps.append(
+                StepRecord(
+                    step=step_number,
+                    status=ResultCategory.NOT_EXECUTED,
+                    message=message,
+                    action=action,
+                )
+            )
 
     @staticmethod
     def _renumber_records(

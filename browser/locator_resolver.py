@@ -94,7 +94,7 @@ class LocatorResolver:
     ) -> tuple[tuple[str, Locator | None], ...]:
         role = (
             self.page.get_by_role(element.role, name=element.name, exact=True)
-            if element.name
+            if element.name and element.role != "text"
             else None
         )
         label = self.page.get_by_label(element.label, exact=True) if element.label else None

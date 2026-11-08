@@ -6,6 +6,7 @@ from urllib.parse import urlsplit
 
 from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from config.settings import Settings, load_settings
 from models.test_result import ResultCategory
@@ -76,7 +77,7 @@ class BrowserManager:
         try:
             page.goto(
                 validated_url,
-                wait_until="load",
+                wait_until="domcontentloaded",
                 timeout=self.settings.navigation_timeout_ms,
             )
         except PlaywrightError as exc:
@@ -85,6 +86,24 @@ class BrowserManager:
                 f"EXECUTION_ERROR: navigation failed: {message}"
             ) from exc
         return page
+
+    def wait_for_dom_content_loaded(self) -> None:
+        """Wait for the current document to be ready, bounded by navigation timeout."""
+        page = self._require_page()
+        try:
+            page.wait_for_load_state(
+                "domcontentloaded",
+                timeout=self.settings.navigation_timeout_ms,
+            )
+        except PlaywrightTimeoutError as exc:
+            raise BrowserExecutionError(
+                "EXECUTION_ERROR: page did not reach DOMContentLoaded before the "
+                "navigation timeout"
+            ) from exc
+        except PlaywrightError as exc:
+            raise BrowserExecutionError(
+                f"EXECUTION_ERROR: waiting for page readiness failed ({type(exc).__name__})"
+            ) from exc
 
     def _require_page(self) -> Page:
         if self.page is None:

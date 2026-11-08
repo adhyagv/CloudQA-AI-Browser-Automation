@@ -125,7 +125,8 @@ def test_configured_maximum_step_count_is_enforced() -> None:
 
 
 def test_invalid_json_then_corrected_json_succeeds() -> None:
-    provider = FakeProvider(["not json", _response()])
+    invalid_response = "not json; sensitive-looking-output"
+    provider = FakeProvider([invalid_response, _response()])
     planner = Planner(provider, _settings(planner_correction_attempts=1))
 
     plan = planner.plan(test_case="Check the welcome heading.", page_snapshot="e12: Welcome")
@@ -133,6 +134,7 @@ def test_invalid_json_then_corrected_json_succeeds() -> None:
     assert plan.status == "ok"
     assert len(provider.prompts) == 2
     assert "Invalid JSON" in provider.prompts[1]
+    assert invalid_response not in provider.prompts[1]
 
 
 def test_retry_limit_returns_planner_error() -> None:

@@ -20,6 +20,8 @@
 
     <section id="dashboard" hidden>
       <h1>Dashboard</h1>
+      <p id="login-success" role="status" hidden></p>
+      <button id="logout-button" type="button" hidden>Logout</button>
       <a id="dashboard-home" href="#dashboard">Dashboard home</a>
     </section>
   </main>
@@ -36,6 +38,10 @@
         form.hidden = true;
         error.hidden = true;
         dashboard.hidden = false;
+        const success = document.querySelector("#login-success");
+        success.textContent = "Welcome, tester. You have successfully logged in.";
+        success.hidden = false;
+        document.querySelector("#logout-button").hidden = false;
       } else {
         error.textContent = "Invalid username or password";
         error.hidden = false;

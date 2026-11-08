@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -92,7 +93,27 @@ def test_snapshot_has_compact_controls_and_never_password_values(
     assert password.masked is True
     assert PASSWORD not in encoded
     assert PASSWORD not in repr(snapshot)
+    assert len(encoded) < len(json.dumps(snapshot.to_dict(), ensure_ascii=False))
+    assert '"visible"' not in encoded
+    assert '"headings"' not in encoded
     assert _element(snapshot, name="Sign in", role="button")
+
+
+def test_snapshot_includes_visible_noninteractive_text_and_accessible_link(
+    browser_manager: BrowserManager,
+) -> None:
+    snapshot = _open(browser_manager, "navigation_dashboard.html")
+    success_text = _element(
+        snapshot,
+        name="You logged into a secure area!",
+        role="text",
+    )
+    logout = _element(snapshot, name="Logout", role="link")
+
+    assert success_text.text == "You logged into a secure area!"
+    assert logout.tag == "a"
+    assert "You logged into a secure area!" in snapshot.compact_text()
+    assert '"role":"link","name":"Logout"' in snapshot.compact_text()
 
 
 def test_snapshot_id_resolves_to_its_labeled_control(

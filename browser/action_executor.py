@@ -163,8 +163,21 @@ class ActionExecutor:
     ) -> TestResult:
         attempts = self.settings.stale_retry_attempts + 1
         for attempt in range(attempts):
+            page = self.manager._require_page()
+            main_frame = page.main_frame
+            navigated = False
+
+            def on_frame_navigated(frame: object) -> None:
+                nonlocal navigated
+                if frame == main_frame:
+                    navigated = True
+
+            if isinstance(action, ClickAction):
+                page.on("framenavigated", on_frame_navigated)
             try:
                 message = self._perform(action, locator)
+                if isinstance(action, ClickAction) and navigated:
+                    self.manager.wait_for_dom_content_loaded()
                 self.inspect()
                 return self._result(action, ResultCategory.PASS, message)
             except PlaywrightError as exc:
@@ -194,6 +207,9 @@ class ActionExecutor:
                     ResultCategory.EXECUTION_ERROR,
                     self.settings.redact(f"EXECUTION_ERROR: {exc}"),
                 )
+            finally:
+                if isinstance(action, ClickAction):
+                    page.remove_listener("framenavigated", on_frame_navigated)
 
         return self._result(
             action,

@@ -26,10 +26,11 @@ class Settings:
     planner_correction_attempts: int = 2
     provider_retries: int = 3
     timeout_seconds: float = 30.0
+    gemini_timeout_ms: int = 180_000
     allowed_secret_names: tuple[str, ...] = ()
     secret_values: Mapping[str, str] | None = None
     headed: bool = False
-    navigation_timeout_ms: int = 10_000
+    navigation_timeout_ms: int = 30_000
     action_timeout_ms: int = 5_000
     snapshot_max_elements: int = 60
     snapshot_text_length: int = 120
@@ -47,6 +48,7 @@ class Settings:
             f"planner_correction_attempts={self.planner_correction_attempts!r}, "
             f"provider_retries={self.provider_retries!r}, "
             f"timeout_seconds={self.timeout_seconds!r}, "
+            f"gemini_timeout_ms={self.gemini_timeout_ms!r}, "
             f"allowed_secret_names={self.allowed_secret_names!r}, "
             f"secret_names={secret_names!r}, "
             f"headed={self.headed!r}, "
@@ -97,12 +99,13 @@ def load_settings(
     max_steps = _integer_setting(values, "PLANNER_MAX_STEPS", 10)
     corrections = _integer_setting(values, "PLANNER_CORRECTION_ATTEMPTS", 2)
     provider_retries = _integer_setting(values, "GEMINI_RETRIES", 3)
-    navigation_timeout_ms = _integer_setting(values, "BROWSER_NAVIGATION_TIMEOUT_MS", 10_000)
+    navigation_timeout_ms = _integer_setting(values, "BROWSER_NAVIGATION_TIMEOUT_MS", 30_000)
     action_timeout_ms = _integer_setting(values, "BROWSER_ACTION_TIMEOUT_MS", 5_000)
     snapshot_max_elements = _integer_setting(values, "SNAPSHOT_MAX_ELEMENTS", 60)
     snapshot_text_length = _integer_setting(values, "SNAPSHOT_TEXT_LENGTH", 120)
     stale_retry_attempts = _integer_setting(values, "BROWSER_STALE_RETRY_ATTEMPTS", 1)
     max_planner_calls = _integer_setting(values, "MAX_PLANNER_CALLS", 4)
+    gemini_timeout_ms = _integer_setting(values, "GEMINI_TIMEOUT_MS", 180_000)
     try:
         timeout = float(values.get("GEMINI_TIMEOUT_SECONDS", "30"))
     except ValueError as exc:
@@ -122,6 +125,8 @@ def load_settings(
         raise SettingsError("BROWSER_STALE_RETRY_ATTEMPTS cannot be negative")
     if max_planner_calls < 1:
         raise SettingsError("MAX_PLANNER_CALLS must be at least 1")
+    if gemini_timeout_ms < 1:
+        raise SettingsError("GEMINI_TIMEOUT_MS must be at least 1")
     if not math.isfinite(timeout) or timeout <= 0:
         raise SettingsError("GEMINI_TIMEOUT_SECONDS must be greater than 0")
 
@@ -150,6 +155,7 @@ def load_settings(
         planner_correction_attempts=corrections,
         provider_retries=provider_retries,
         timeout_seconds=timeout,
+        gemini_timeout_ms=gemini_timeout_ms,
         allowed_secret_names=secret_names,
         secret_values=secret_values,
         headed=values.get("BROWSER_HEADED", "").strip().lower() in {"1", "true", "yes"},

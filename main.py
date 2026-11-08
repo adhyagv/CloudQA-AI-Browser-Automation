@@ -17,7 +17,7 @@ from reporting.result_writer import ResultWriter
 
 
 class _SnapshotDemoProvider(PlannerProvider):
-    """Offline CLI demo that verifies the first visible snapshot element."""
+    """Offline CLI demo that verifies a requested snapshot button when available."""
 
     def generate(self, prompt: str, *, response_schema: type) -> str:
         try:
@@ -25,8 +25,10 @@ class _SnapshotDemoProvider(PlannerProvider):
             request, _ = json.JSONDecoder().raw_decode(request_text)
             snapshot = json.loads(request["page_snapshot"])
             elements = snapshot.get("elements", [])
+            test_case = request.get("test_case", "")
         except (IndexError, KeyError, json.JSONDecodeError, TypeError):
             elements = []
+            test_case = ""
         if not elements:
             return json.dumps(
                 {
@@ -36,11 +38,19 @@ class _SnapshotDemoProvider(PlannerProvider):
                     "message": "No visible snapshot element is available to verify.",
                 }
             )
-        element = elements[0]
+        element = next(
+            (
+                item
+                for item in elements
+                if item.get("role") == "button"
+                and item.get("name", "").casefold() in test_case.casefold()
+            ),
+            elements[0],
+        )
         return json.dumps(
             {
                 "status": "ok",
-                "summary": "Verify that the first visible snapshot element is displayed.",
+                "summary": f"Verify that {element.get('name') or 'the selected element'} is displayed.",
                 "steps": [{"action": "expect_visible", "element_id": element["id"]}],
             }
         )

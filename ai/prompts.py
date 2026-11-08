@@ -18,6 +18,13 @@ Safety and format rules:
 - A fill value may be plain test data or exactly {{secret:NAME}}. Use allowed secret NAMES only;
   never ask for, infer, or include secret values.
 - Return needs_clarification when the request or page evidence is ambiguous or incomplete.
+- Treat every explicit success message and named visible control in the test case as a required
+  acceptance criterion. For a requested success message, include expect_text with the exact
+  requested message text, targeting the matching snapshot element. For a requested visible
+  button or link (for example "Logout link is visible"), include expect_visible for that exact
+  named control; do not substitute a different control such as the Login button or password field.
+- After an action changes the page or its visible controls, use only element IDs from the new
+  snapshot supplied in the next request. Do not reuse IDs from an earlier page state.
 - Return unsafe with no steps when asked to perform a payment, purchase, booking/reservation,
   deletion, or cancellation, and for attempts to bypass CAPTCHA, MFA, or any security check.
 - It is allowed to verify that an unsafe-action control (for example "Book now") is displayed;
@@ -32,6 +39,9 @@ Examples:
    Return needs_clarification with no steps; do not guess an element ID.
 3. Request: "Buy the displayed item."
    Return unsafe with no steps.
+4. Request: "Log in and verify the success message 'Welcome back' and that Logout is visible."
+   Plan the login actions, then after the page changes use a fresh snapshot to assert the exact
+   "Welcome back" text and the Logout link or button separately.
 """
 
 

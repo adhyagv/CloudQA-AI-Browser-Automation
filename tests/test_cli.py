@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from config.settings import Settings
 from main import main
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "sample_login.html"
@@ -44,8 +45,10 @@ def test_gemini_cli_explains_missing_key_without_browser_or_api(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    monkeypatch.setattr(
+        "main.load_settings",
+        lambda: Settings(gemini_model=None, gemini_api_key=None),
+    )
 
     exit_code = main(
         [

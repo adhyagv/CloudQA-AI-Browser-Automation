@@ -11,7 +11,26 @@ from playwright.sync_api import Locator, Page
 
 from config.settings import Settings, load_settings
 
-_INTERACTIVE_SELECTOR = "a, button, input, select, textarea, [role=alert], [role=status]"
+_INTERACTIVE_SELECTOR = (
+    "a, button, input, select, textarea, [role=link], [role=button], "
+    "[role=alert], [role=status]"
+)
+_TEXT_SELECTOR = "body *"
+_NON_TEXT_TAGS = {
+    "a",
+    "button",
+    "input",
+    "select",
+    "textarea",
+    "label",
+    "script",
+    "style",
+    "svg",
+    "path",
+    "h1",
+    "h2",
+    "h3",
+}
 _ROLE_BY_TAG = {
     "a": "link",
     "button": "button",
@@ -73,7 +92,34 @@ class PageSnapshot:
         }
 
     def compact_text(self) -> str:
-        return json.dumps(self.to_dict(), ensure_ascii=False, separators=(",", ":"))
+        elements: list[dict[str, Any]] = []
+        for element in self.elements:
+            item: dict[str, Any] = {
+                "id": element.element_id,
+                "role": element.role,
+                "name": element.name,
+            }
+            if element.label:
+                item["label"] = element.label
+            if element.placeholder:
+                item["placeholder"] = element.placeholder
+            if element.text:
+                item["text"] = element.text
+            if element.input_type:
+                item["input_type"] = element.input_type
+            if not element.enabled:
+                item["enabled"] = False
+            if element.checked is not None:
+                item["checked"] = element.checked
+            if element.masked:
+                item["masked"] = True
+            elements.append(item)
+        snapshot = {
+            "url": self.url,
+            "title": self.title,
+            "elements": elements,
+        }
+        return json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
 
 
 class PageInspector:
@@ -158,6 +204,32 @@ class PageInspector:
                 )
             )
 
+        for locator, tag, role, text in self._visible_text_items(page):
+            if len(elements) >= self.settings.snapshot_max_elements:
+                break
+            elements.append(
+                SnapshotElement(
+                    element_id=f"e{len(elements) + 1}",
+                    role=role,
+                    name=self._truncate(
+                        locator.get_attribute("aria-label")
+                        or locator.get_attribute("title")
+                        or text
+                    ),
+                    label="",
+                    placeholder="",
+                    text=self._truncate(text),
+                    input_type="",
+                    enabled=False,
+                    visible=True,
+                    checked=None,
+                    masked=False,
+                    locator=locator,
+                    stable_id=locator.get_attribute("id") or "",
+                    tag=tag,
+                )
+            )
+
         return PageSnapshot(
             token=uuid.uuid4().hex,
             url=page.url,
@@ -176,6 +248,29 @@ class PageInspector:
                 if text:
                     headings.append((heading, text))
         return headings
+
+    def _visible_text_items(
+        self,
+        page: Page,
+    ) -> list[tuple[Locator, str, str, str]]:
+        items: list[tuple[Locator, str, str, str]] = []
+        locators = page.locator(_TEXT_SELECTOR)
+        for index in range(locators.count()):
+            locator = locators.nth(index)
+            if not locator.is_visible():
+                continue
+            tag = locator.evaluate("(element) => element.tagName.toLowerCase()")
+            role = locator.get_attribute("role") or ""
+            if tag in _NON_TEXT_TAGS or role in {"alert", "status"}:
+                continue
+            text = locator.evaluate(
+                "(element) => Array.from(element.childNodes)"
+                ".filter((node) => node.nodeType === Node.TEXT_NODE)"
+                ".map((node) => node.textContent || '').join(' ').trim()"
+            )
+            if text.strip():
+                items.append((locator, tag, role or "text", text))
+        return items
 
     def _associated_label(self, page: Page, locator: Locator, stable_id: str) -> str:
         labels = page.locator("label")
@@ -200,7 +295,7 @@ class PageInspector:
         )
 
     def _visible_text(self, locator: Locator, tag: str, role: str) -> str:
-        if tag in {"a", "button"} or role in {"alert", "status"}:
+        if tag in {"a", "button"} or role in {"link", "button", "alert", "status"}:
             return locator.inner_text().strip()
         return ""
 
