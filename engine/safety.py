@@ -48,17 +48,40 @@ class SafetyResult:
 
 
 def screen_text(text: str) -> SafetyResult:
-    """Block performing unsafe operations but allow verification of related UI."""
-    if _UNSAFE_INTENT.search(text):
-        return SafetyResult(
-            code=BLOCKED_UNSAFE_ACTION,
-            reason="Financial or irreversible actions are not allowed in generated plans.",
-        )
+    """Block unsafe operations while allowing harmless UI verification."""
+
+    # Check each instruction separately so words in different clauses
+    # are not incorrectly treated as one destructive action.
+    clauses = re.split(
+        r"\bthen\b|[.!?;,\n]",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    for clause in clauses:
+        clause = clause.strip()
+
+        # Ignore explicitly prohibited actions, such as "Do not click Delete".
+        if re.match(
+            r"^(?:do\s+not|don't|dont|never|must\s+not|mustn't|without)\b",
+            clause,
+            re.IGNORECASE,
+        ):
+            continue
+
+        if _UNSAFE_INTENT.search(clause):
+            return SafetyResult(
+                code=BLOCKED_UNSAFE_ACTION,
+                reason="Financial or irreversible actions are not allowed in generated plans.",
+            )
+
+    # Keep the security-bypass protection.
     if _SECURITY_BYPASS.search(text):
         return SafetyResult(
             code=BLOCKED_UNSAFE_ACTION,
             reason="Bypassing CAPTCHA, MFA, or a security check is not allowed.",
         )
+
     return SafetyResult(code=None, reason="No blocked intent detected.")
 
 

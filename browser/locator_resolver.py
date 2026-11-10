@@ -87,7 +87,38 @@ class LocatorResolver:
             element=element,
             message=f"Element ID {element_id} could not be found on the current page.",
         )
+    def resolve_any_visible(
+        self,
+        snapshot: PageSnapshot,
+        element_id: str,
+    ) -> ResolutionResult:
+        """Resolve visibility when multiple elements share the same label."""
+        element = snapshot.get(element_id)
 
+        if element is None:
+            return ResolutionResult(
+                ResolutionStatus.NOT_FOUND,
+                message=f"Element ID {element_id} is not present in the current snapshot.",
+            )
+
+        for _, locator in self._semantic_candidates(element):
+            if locator is None:
+                continue
+
+            for index in range(locator.count()):
+                candidate = locator.nth(index)
+                if candidate.is_visible():
+                    return ResolutionResult(
+                        ResolutionStatus.RESOLVED,
+                        element=element,
+                        locator=candidate,
+                    )
+
+        return ResolutionResult(
+            ResolutionStatus.HIDDEN,
+            element=element,
+            message=f"No visible match for element ID {element_id}.",
+        )
     def _semantic_candidates(
         self,
         element: SnapshotElement,

@@ -36,6 +36,14 @@ class AssertionEngine:
             action.element_id,
             require_enabled=False,
         )
+        if (
+            resolution.status == ResolutionStatus.AMBIGUOUS
+            and isinstance(action, ExpectVisibleAction)
+        ):
+            resolution = self.resolver.resolve_any_visible(
+                snapshot,
+                action.element_id,
+            )
         if resolution.status == ResolutionStatus.AMBIGUOUS:
             return self._result(
                 action,

@@ -65,21 +65,32 @@ def _requested_assertions(test_case: str) -> tuple[bool, set[str], set[str]]:
         match = _QUOTED_TEXT.search(following_text)
         if match:
             exact_success_texts.add(match.group(1).strip())
-
     visible_buttons: set[str] = set()
-    for match in _VISIBLE_CONTROL_MENTION.finditer(test_case):
-        surrounding_text = test_case[max(0, match.start() - 70) : match.end() + 70]
-        if not _VISIBLE_WORDS.search(surrounding_text):
-            continue
-        words = [
-            word
-            for word in match.group(1).split()
-            if word.lower() not in _BUTTON_FILLER_WORDS
-        ]
-        if words:
-            visible_buttons.add(" ".join(words).casefold())
-    return success_requested, exact_success_texts, visible_buttons
 
+    # Examine each instruction separately to avoid treating clicked
+    # controls as additional visibility requirements.
+    clauses = re.split(
+        r"\bthen\b|[.!?;\n]",
+        test_case,
+        flags=re.IGNORECASE,
+    )
+
+    for clause in clauses:
+        if not _VISIBLE_WORDS.search(clause):
+            continue
+
+        for match in _VISIBLE_CONTROL_MENTION.finditer(clause):
+            words = [
+                word
+                for word in match.group(1).split()
+                if word.lower() not in _BUTTON_FILLER_WORDS
+                and word.lower() not in {"a", "an", "the"}
+            ]
+
+            if words:
+                visible_buttons.add(" ".join(words).casefold())
+
+    return success_requested, exact_success_texts, visible_buttons
 
 class _LimitedProvider(PlannerProvider):
     def __init__(self, provider: PlannerProvider, limit: int) -> None:

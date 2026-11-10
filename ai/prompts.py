@@ -18,6 +18,15 @@ Safety and format rules:
 - A fill value may be plain test data or exactly {{secret:NAME}}. Use allowed secret NAMES only;
   never ask for, infer, or include secret values.
 - Return needs_clarification when the request or page evidence is ambiguous or incomplete.
+- IMPORTANT: For dynamic UI tests, distinguish between controls that exist now
+  and controls that will appear after an action. If the user asks to click an
+  existing button that creates or reveals another control, do not request
+  clarification just because the future control is absent from the current
+  snapshot. First plan the click using the existing element ID, followed by an
+  expect_visible assertion for an existing relevant element to satisfy the
+  plan schema. The runner will inspect the changed page and request a new plan.
+  In the next plan, use the refreshed snapshot to verify the newly created
+  control. Never click that control unless explicitly requested and safe.
 - Treat every explicit success message and named visible control in the test case as a required
   acceptance criterion. For a requested success message, include expect_text with the exact
   requested message text, targeting the matching snapshot element. For a requested visible
